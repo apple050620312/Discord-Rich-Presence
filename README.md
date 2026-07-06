@@ -17,7 +17,7 @@
 
 ### 1. 安裝環境
 請確保您的電腦已經安裝 [Python 3.8 或以上版本](https://www.python.org/downloads/)。
-打開終端機 (Terminal / 命列提示字元)，進入專案資料夾並安裝依賴套件：
+打開終端機 (Terminal / 命列提示字元)，進入專案資料夾並安裝依賴套件（基於穩定的 `discord.py-self` 核心）：
 
 ```bash
 pip install -r requirements.txt
@@ -27,7 +27,15 @@ pip install -r requirements.txt
 1. 將專案中的 `config.example.json` 複製一份，並將新檔案重新命名為 `config.json`。
 2. 用文字編輯器 (如 VSCode, 記事本) 打開 `config.json`。
 
-### 3. 取得您的 Discord Token
+### 3. 設定帳號與自訂狀態 (Custom Status)
+在 `accounts` 陣列中填入您的設定，每個帳號可獨立設定：
+- `token`: 您的 Discord Token (請絕對保密)。
+- `template`: 您要在下面 `templates` 區塊中套用的 Rich Presence 範本名稱。
+- `is_bot`: 是否為機器人 (一般使用者帳號請填 `false`)。
+- `custom_status_text` (選填): 您要顯示在狀態列的自訂文字。
+- `custom_status_emoji` (選填): 您要顯示的表情符號，支援一般 Unicode 表情 (如 `🔥`)，以及動態/靜態伺服器自訂表情 (直接貼上完整字串，例如：`<a:minecraft:1262740542736044103>`)。
+
+### 4. 取得您的 Discord Token
 > ⚠️ **警告**：您的 Token 等同於您的帳號密碼！請**絕對不要**傳給任何人，也不要截圖外流。直接使用 User Token 屬於 Self-botting，雖然此腳本只做狀態更新，但請自行評估使用風險。
 
 1. 打開瀏覽器並登入 [Discord 網頁版](https://discord.com/app)。
@@ -38,7 +46,7 @@ pip install -r requirements.txt
 6. 在右側的 **Headers (標頭)** -> **Request Headers (請求標頭)** 中找到 `Authorization`，後面的字串就是您的 Token。
 7. 將取得的 Token 填入 `config.json` 中的 `accounts` -> `token` 欄位裡。
 
-### 4. 設定您的 Rich Presence 範本
+### 5. 設定您的 Rich Presence 範本
 在 `config.json` 的 `templates` 區塊中，您可以自由新增或修改狀態。
 以下是可用欄位清單（完美對應 Vencord CustomRPC）：
 
@@ -70,9 +78,9 @@ pip install -r requirements.txt
 - `"Same as your current time"`：Vencord 的 TIME 模式，會計算從當天午夜 00:00 到現在的時間。
 - `"Custom"`：使用您填入的 `start_timestamp` 與 `end_timestamp`。
 
-### 5. 執行腳本
+### 6. 執行腳本
 設定完成後，在終端機輸入：
 ```bash
-python main.py
+python app.py
 ```
-如果看到 `Successfully connected and ready as: 您的名稱#1234`，就代表成功了！此時您可以關閉 Discord 桌面版，狀態依舊會 24 小時保持連線。若要停止，只需在終端機按下 `Ctrl + C` 即可。
+如果看到 `Successfully connected and ready as: 您的名稱`，就代表成功了！此腳本會自動處理 zlib 流量壓縮、多帳號階梯登入與斷線重連。若要停止，只需在終端機按下 `Ctrl + C` 即可。

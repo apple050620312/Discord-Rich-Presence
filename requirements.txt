@@ -1,1 +1,1 @@
-websockets>=11.0.3
+discord.py-self>=1.9.2

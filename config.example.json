@@ -38,12 +38,16 @@
     {
       "token": "YOUR_FIRST_ACCOUNT_TOKEN",
       "template": "my_custom_rp",
-      "is_bot": false
+      "is_bot": false,
+      "custom_status_text": "我是狀態文字",
+      "custom_status_emoji": "<a:minecraft:1262740542736044103>"
     },
     {
       "token": "YOUR_SECOND_ACCOUNT_TOKEN",
       "template": "simple_streaming",
-      "is_bot": false
+      "is_bot": false,
+      "custom_status_text": "睡覺中勿擾",
+      "custom_status_emoji": "💤"
     }
   ]
 }
