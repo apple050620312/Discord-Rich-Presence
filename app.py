@@ -137,15 +137,21 @@ class DiscordPresenceClient:
         if self.template.get("state_url"):
             activity["state_url"] = self.template.get("state_url")
             
-        # Buttons 處理
-        buttons = []
+        # Buttons 處理 (User Token 的格式必須是陣列字串與 metadata)
+        button_texts = []
+        button_urls = []
         if self.template.get("button1_text"):
-            buttons.append({"label": str(self.template.get("button1_text"))[:32], "url": str(self.template.get("button1_url", ""))})
+            button_texts.append(str(self.template.get("button1_text"))[:32])
+            button_urls.append(str(self.template.get("button1_url", "")))
         if self.template.get("button2_text"):
-            buttons.append({"label": str(self.template.get("button2_text"))[:32], "url": str(self.template.get("button2_url", ""))})
+            button_texts.append(str(self.template.get("button2_text"))[:32])
+            button_urls.append(str(self.template.get("button2_url", "")))
             
-        if buttons:
-            activity["buttons"] = buttons
+        if button_texts:
+            activity["buttons"] = button_texts
+            activity["metadata"] = {
+                "button_urls": button_urls
+            }
         
         presence_payload = {
             "status": self.template.get("status", "online"),
