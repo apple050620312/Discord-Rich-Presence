@@ -34,6 +34,10 @@ class DiscordPresenceClient:
 
     async def heartbeat(self):
         """背景任務：定時發送心跳包"""
+        # Discord API 要求第一次心跳需加上隨機的 jitter 延遲，以避免伺服器被突發流量衝擊
+        jitter = random.uniform(0, 1)
+        await asyncio.sleep((self.heartbeat_interval / 1000) * jitter)
+        
         while True:
             try:
                 if self.ws:
@@ -43,7 +47,7 @@ class DiscordPresenceClient:
                     }
                     await self.ws.send(json.dumps(payload))
                     self.logger.debug("Sent Heartbeat")
-                await asyncio.sleep(self.heartbeat_interval * 0.9 / 1000)
+                await asyncio.sleep(self.heartbeat_interval / 1000)
             except Exception as e:
                 self.logger.error(f"Heartbeat error: {e}")
                 break
@@ -78,7 +82,9 @@ class DiscordPresenceClient:
                 "compress": False
             }
         }
-        
+        if self.is_bot:
+            payload["d"]["intents"] = 0  # 0 indicates minimal intents, required for bot tokens
+            
         await self.ws.send(json.dumps(payload))
         self.logger.info("Sent Identify payload")
 
@@ -219,12 +225,16 @@ class DiscordPresenceClient:
         while True:
             try:
                 self.logger.info("Connecting to Discord Gateway...")
-                async with websockets.connect(GATEWAY_URL) as ws:
+                # 加入 max_size=None 避免帳號伺服器過多導致 READY 封包超過 1MB 限制而被強制斷開
+                connect_url = self.resume_gateway_url if hasattr(self, 'resume_gateway_url') and self.resume_gateway_url else GATEWAY_URL
+                
+                async with websockets.connect(connect_url, max_size=None) as ws:
                     self.ws = ws
                     async for message in ws:
                         data = json.loads(message)
                         op = data.get("op")
-                        self.sequence = data.get("s", self.sequence)
+                        if data.get("s") is not None:
+                            self.sequence = data.get("s")
                         
                         if op == 10:  # Hello
                             self.heartbeat_interval = data["d"]["heartbeat_interval"]
@@ -234,7 +244,20 @@ class DiscordPresenceClient:
                                 self.heartbeat_task.cancel()
                             self.heartbeat_task = asyncio.create_task(self.heartbeat())
                             
-                            await self.identify()
+                            if hasattr(self, 'session_id') and self.session_id:
+                                # 嘗試恢復連線 (Resume) 避免重新下載巨大封包
+                                self.logger.info(f"Attempting to resume session {self.session_id}...")
+                                resume_payload = {
+                                    "op": 6,
+                                    "d": {
+                                        "token": self.token,
+                                        "session_id": self.session_id,
+                                        "seq": self.sequence
+                                    }
+                                }
+                                await self.ws.send(json.dumps(resume_payload))
+                            else:
+                                await self.identify()
                             
                         elif op == 11:  # Heartbeat ACK
                             self.logger.debug("Received Heartbeat ACK")
@@ -243,13 +266,22 @@ class DiscordPresenceClient:
                             event_type = data.get("t")
                             if event_type == "READY":
                                 user = data["d"]["user"]
+                                self.session_id = data["d"]["session_id"]
+                                self.resume_gateway_url = data["d"]["resume_gateway_url"]
                                 self.logger.info(f"Successfully connected and ready as: {user.get('username')}#{user.get('discriminator')}")
                                 await self.send_presence()
+                            elif event_type == "RESUMED":
+                                self.logger.info("Session successfully resumed! Avoided re-downloading initial payload.")
+                                # 恢復連線後，保持原有的 Presence 狀態即可
+                                
                         elif op == 7:  # Reconnect
                             self.logger.info("Gateway requested reconnect. Reconnecting...")
                             break
                         elif op == 9:  # Invalid Session
                             self.logger.warning("Invalid Session. Re-identifying...")
+                            # 如果 Session 無效，清空 session_id 強制重新 Identify
+                            self.session_id = None
+                            self.resume_gateway_url = None
                             await asyncio.sleep(random.uniform(1, 5))
                             break
                             
