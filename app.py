@@ -35,7 +35,7 @@ class DiscordPresenceClient:
         """背景任務：定時發送心跳包"""
         while True:
             try:
-                if self.ws and not self.ws.closed:
+                if self.ws:
                     payload = {
                         "op": 1,
                         "d": self.sequence
