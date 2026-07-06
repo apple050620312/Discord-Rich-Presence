@@ -29,6 +29,7 @@ class DiscordPresenceClient:
         self.ws = None
         self.heartbeat_task = None
         self.sequence = None
+        self.script_start_time = int(time.time() * 1000)
 
     async def heartbeat(self):
         """背景任務：定時發送心跳包"""
@@ -51,10 +52,105 @@ class DiscordPresenceClient:
         """發送認證與狀態資訊"""
         auth_token = f"Bot {self.token}" if self.is_bot else self.token
         
+        # 對應 Activity Type
+        activity_type_map = {
+            "Playing": 0,
+            "Streaming": 1,
+            "Listening": 2,
+            "Watching": 3,
+            "Competing": 5
+        }
+        
+        act_type_str = self.template.get("activity_type", "Playing")
+        act_type = activity_type_map.get(act_type_str, 0)
+        
+        # 建立基礎活動屬性
+        activity = {
+            "name": self.template.get("application_name", "Rich Presence"),
+            "type": act_type
+        }
+        
+        if self.template.get("application_id"):
+            activity["application_id"] = str(self.template.get("application_id"))
+            
+        if self.template.get("detail_line_1"):
+            activity["details"] = self.template.get("detail_line_1")
+            
+        if self.template.get("state_line_2"):
+            activity["state"] = self.template.get("state_line_2")
+            
+        if self.template.get("stream_link") and act_type == 1:
+            activity["url"] = self.template.get("stream_link")
+            
+        # Party Size
+        p_size = self.template.get("party_size")
+        p_max = self.template.get("maximum_party_size")
+        if p_size is not None or p_max is not None:
+            activity["party"] = {
+                "size": [
+                    int(p_size) if p_size is not None else 1,
+                    int(p_max) if p_max is not None else 1
+                ]
+            }
+            
+        # Assets (Large Image & Small Image)
+        assets = {}
+        if self.template.get("large_image_url_key"):
+            assets["large_image"] = self.template.get("large_image_url_key")
+        if self.template.get("large_image_text"):
+            assets["large_text"] = self.template.get("large_image_text")
+        if self.template.get("large_image_clickable_url"):
+            assets["large_url"] = self.template.get("large_image_clickable_url")
+            
+        if self.template.get("small_image_url_key"):
+            assets["small_image"] = self.template.get("small_image_url_key")
+        if self.template.get("small_image_text"):
+            assets["small_text"] = self.template.get("small_image_text")
+        if self.template.get("small_image_clickable_url"):
+            assets["small_url"] = self.template.get("small_image_clickable_url")
+            
+        if assets:
+            activity["assets"] = assets
+            
+        # Timestamps
+        timestamp_mode = self.template.get("timestamp_mode", "None")
+        timestamps = {}
+        if timestamp_mode == "Custom":
+            if self.template.get("start_timestamp"):
+                timestamps["start"] = int(self.template.get("start_timestamp"))
+            if self.template.get("end_timestamp"):
+                timestamps["end"] = int(self.template.get("end_timestamp"))
+        elif timestamp_mode == "Since discord open":
+            timestamps["start"] = self.script_start_time
+        elif "Same as your current time" in timestamp_mode:
+            # Vencord 計算方式：從當天午夜開始算
+            now = time.localtime()
+            midnight_offset = (now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec) * 1000
+            timestamps["start"] = int(time.time() * 1000) - midnight_offset
+            
+        if timestamps:
+            activity["timestamps"] = timestamps
+            
+        # Vencord 特別支援的 URLs
+        if self.template.get("detail_url"):
+            activity["details_url"] = self.template.get("detail_url")
+        if self.template.get("state_url"):
+            activity["state_url"] = self.template.get("state_url")
+            
+        # Buttons 處理
+        buttons = []
+        if self.template.get("button1_text"):
+            buttons.append({"label": str(self.template.get("button1_text"))[:32], "url": str(self.template.get("button1_url", ""))})
+        if self.template.get("button2_text"):
+            buttons.append({"label": str(self.template.get("button2_text"))[:32], "url": str(self.template.get("button2_url", ""))})
+            
+        if buttons:
+            activity["buttons"] = buttons
+        
         presence_payload = {
             "status": self.template.get("status", "online"),
             "since": int(time.time() * 1000),
-            "activities": self.template.get("activities", []),
+            "activities": [activity],
             "afk": False
         }
         

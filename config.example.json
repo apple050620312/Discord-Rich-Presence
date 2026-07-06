@@ -1,46 +1,48 @@
 {
   "templates": {
-    "gaming_template": {
+    "my_custom_rp": {
       "status": "online",
-      "activities": [
-        {
-          "name": "Minecraft",
-          "type": 0,
-          "details": "正在蓋大房子",
-          "state": "生存模式"
-        }
-      ]
+      "activity_type": "Playing",
+      "application_id": "123456789012345678",
+      "application_name": "我的自訂應用",
+      "detail_line_1": "正在遊玩自訂狀態",
+      "detail_url": "",
+      "state_line_2": "目前在第一關",
+      "state_url": "",
+      "stream_link": "",
+      "party_size": 1,
+      "maximum_party_size": 4,
+      "large_image_url_key": "https://i.imgur.com/large.png",
+      "large_image_text": "大圖片提示文字",
+      "large_image_clickable_url": "",
+      "small_image_url_key": "https://i.imgur.com/small.png",
+      "small_image_text": "小圖片提示文字",
+      "small_image_clickable_url": "",
+      "button1_text": "第一個按鈕",
+      "button1_url": "https://example.com/btn1",
+      "button2_text": "第二個按鈕",
+      "button2_url": "https://example.com/btn2",
+      "timestamp_mode": "Since discord open",
+      "start_timestamp": 0,
+      "end_timestamp": 0
     },
-    "custom_status_template": {
-      "status": "dnd",
-      "activities": [
-        {
-          "name": "Custom Status",
-          "type": 4,
-          "state": "這是一個自訂狀態 👋"
-        }
-      ]
-    },
-    "watching_anime_template": {
-      "status": "idle",
-      "activities": [
-        {
-          "name": "葬送的芙莉蓮",
-          "type": 3,
-          "details": "第 28 集"
-        }
-      ]
+    "simple_streaming": {
+      "status": "online",
+      "activity_type": "Streaming",
+      "application_name": "實況主",
+      "detail_line_1": "來看看我的直播！",
+      "stream_link": "https://twitch.tv/your_channel_name"
     }
   },
   "accounts": [
     {
       "token": "YOUR_FIRST_ACCOUNT_TOKEN",
-      "template": "gaming_template",
+      "template": "my_custom_rp",
       "is_bot": false
     },
     {
       "token": "YOUR_SECOND_ACCOUNT_TOKEN",
-      "template": "custom_status_template",
+      "template": "simple_streaming",
       "is_bot": false
     }
   ]
