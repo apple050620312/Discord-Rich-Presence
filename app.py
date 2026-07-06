@@ -159,7 +159,7 @@ class DiscordPresenceClient:
                 "token": auth_token,
                 "properties": {
                     "os": "Windows",
-                    "browser": "Chrome",
+                    "browser": "Discord Client",
                     "device": ""
                 }
             }
@@ -205,7 +205,8 @@ class DiscordPresenceClient:
         # 建立基礎活動屬性
         activity = {
             "name": self.template.get("application_name", "Rich Presence"),
-            "type": act_type
+            "type": act_type,
+            "flags": 1
         }
         
         app_id = self.template.get("application_id")
@@ -349,7 +350,7 @@ class DiscordPresenceClient:
                         
                         elif op == 9:  # Invalid Session
                             self.logger.warning("Invalid session. Re-identifying...")
-                            await asyncio.sleep(2)
+                            await asyncio.sleep(random.uniform(1, 5))
                             break # 斷開連接並讓外層迴圈重新連線
                             
             except websockets.exceptions.ConnectionClosed as e:
@@ -362,6 +363,11 @@ class DiscordPresenceClient:
                 if self.heartbeat_task:
                     self.heartbeat_task.cancel()
                 await asyncio.sleep(5)
+
+async def start_account(client, index):
+    if index > 0:
+        await asyncio.sleep(index * 6)  # 避免多個帳號同時 Identify 被 Discord 限流
+    await client.connect()
 
 async def main():
     config_path = "config.json"
@@ -399,7 +405,7 @@ async def main():
             continue
 
         client = DiscordPresenceClient(token, template, is_bot, i)
-        tasks.append(client.connect())
+        tasks.append(asyncio.create_task(start_account(client, i)))
 
     if not tasks:
         logging.error("沒有可執行的帳號任務。")
