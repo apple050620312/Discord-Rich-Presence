@@ -1,0 +1,47 @@
+{
+  "templates": {
+    "gaming_template": {
+      "status": "online",
+      "activities": [
+        {
+          "name": "Minecraft",
+          "type": 0,
+          "details": "正在蓋大房子",
+          "state": "生存模式"
+        }
+      ]
+    },
+    "custom_status_template": {
+      "status": "dnd",
+      "activities": [
+        {
+          "name": "Custom Status",
+          "type": 4,
+          "state": "這是一個自訂狀態 👋"
+        }
+      ]
+    },
+    "watching_anime_template": {
+      "status": "idle",
+      "activities": [
+        {
+          "name": "葬送的芙莉蓮",
+          "type": 3,
+          "details": "第 28 集"
+        }
+      ]
+    }
+  },
+  "accounts": [
+    {
+      "token": "YOUR_FIRST_ACCOUNT_TOKEN",
+      "template": "gaming_template",
+      "is_bot": false
+    },
+    {
+      "token": "YOUR_SECOND_ACCOUNT_TOKEN",
+      "template": "custom_status_template",
+      "is_bot": false
+    }
+  ]
+}
