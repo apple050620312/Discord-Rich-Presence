@@ -159,7 +159,7 @@ class DiscordPresenceClient:
                 "token": auth_token,
                 "properties": {
                     "os": "Windows",
-                    "browser": "Discord Client",
+                    "browser": "Chrome",
                     "device": ""
                 }
             }
@@ -279,9 +279,6 @@ class DiscordPresenceClient:
             activity["timestamps"] = timestamps
             
         # Buttons
-        # 直接與 Gateway 溝通時，User Token 使用 array of strings 與 metadata
-        # (雖然 Gateway API 標準要求 Array of Objects，但在某些情況下 User Token 能接受此法)
-        # 若仍有問題，我們改回標準格式
         button_texts = []
         button_urls = []
         if self.template.get("button1_text"):
@@ -292,17 +289,18 @@ class DiscordPresenceClient:
             button_urls.append(str(self.template.get("button2_url", "")))
             
         if button_texts:
-            # 嘗試使用標準 Gateway Object 格式，這對於大部份 API 比較安全
-            activity["buttons"] = [
-                {"label": text, "url": url} for text, url in zip(button_texts, button_urls)
-            ]
+            # 必須使用 Vencord 方式 (String Array + metadata) 來欺騙 Gateway
+            activity["buttons"] = button_texts
+            activity["metadata"] = {
+                "button_urls": button_urls
+            }
             
         # 發送 OP 3 Presence Update
         presence_payload = {
             "op": 3,
             "d": {
                 "status": self.template.get("status", "online"),
-                "since": int(time.time() * 1000),
+                "since": 0,
                 "activities": [activity],
                 "afk": False
             }
