@@ -153,13 +153,6 @@ class DiscordPresenceClient:
                 "button_urls": button_urls
             }
         
-        presence_payload = {
-            "status": self.template.get("status", "online"),
-            "since": int(time.time() * 1000),
-            "activities": [activity],
-            "afk": False
-        }
-        
         payload = {
             "op": 2,
             "d": {
@@ -168,13 +161,154 @@ class DiscordPresenceClient:
                     "os": "Windows",
                     "browser": "Chrome",
                     "device": ""
-                },
-                "presence": presence_payload
+                }
             }
         }
         
         await self.ws.send(json.dumps(payload))
-        self.logger.info("Sent Identify payload with rich presence")
+        self.logger.info("Sent Identify payload")
+
+    async def resolve_asset(self, app_id, key):
+        if not app_id or not key or str(key).startswith("http"):
+            return key
+            
+        def fetch():
+            import urllib.request
+            try:
+                url = f"https://discord.com/api/v9/oauth2/applications/{app_id}/assets"
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    data = json.loads(response.read().decode())
+                    for asset in data:
+                        if asset.get("name") == key:
+                            return asset.get("id")
+            except Exception as e:
+                self.logger.warning(f"Failed to resolve asset key '{key}': {e}")
+            return key
+            
+        return await asyncio.to_thread(fetch)
+
+    async def send_presence(self):
+        """發送 OP 3 Presence Update"""
+        # 對應 Activity Type
+        activity_type_map = {
+            "Playing": 0,
+            "Streaming": 1,
+            "Listening": 2,
+            "Watching": 3,
+            "Competing": 5
+        }
+        
+        act_type_str = self.template.get("activity_type", "Playing")
+        act_type = activity_type_map.get(act_type_str, 0)
+        
+        # 建立基礎活動屬性
+        activity = {
+            "name": self.template.get("application_name", "Rich Presence"),
+            "type": act_type
+        }
+        
+        app_id = self.template.get("application_id")
+        if app_id:
+            activity["application_id"] = str(app_id)
+            
+        if self.template.get("detail_line_1"):
+            activity["details"] = self.template.get("detail_line_1")
+            
+        if self.template.get("state_line_2"):
+            activity["state"] = self.template.get("state_line_2")
+            
+        if self.template.get("stream_link") and act_type == 1:
+            activity["url"] = self.template.get("stream_link")
+            
+        # Party Size
+        p_size = self.template.get("party_size")
+        p_max = self.template.get("maximum_party_size")
+        if p_size is not None or p_max is not None:
+            activity["party"] = {
+                "size": [
+                    int(p_size) if p_size is not None else 1,
+                    int(p_max) if p_max is not None else 1
+                ]
+            }
+            
+        # Assets
+        assets = {}
+        large_key = self.template.get("large_image_url_key")
+        if large_key:
+            if not str(large_key).startswith("http") and app_id:
+                large_key = await self.resolve_asset(app_id, large_key)
+            assets["large_image"] = large_key
+            
+        if self.template.get("large_image_text"):
+            assets["large_text"] = self.template.get("large_image_text")
+        if self.template.get("large_image_clickable_url"):
+            assets["large_url"] = self.template.get("large_image_clickable_url")
+            
+        small_key = self.template.get("small_image_url_key")
+        if small_key:
+            if not str(small_key).startswith("http") and app_id:
+                small_key = await self.resolve_asset(app_id, small_key)
+            assets["small_image"] = small_key
+            
+        if self.template.get("small_image_text"):
+            assets["small_text"] = self.template.get("small_image_text")
+        if self.template.get("small_image_clickable_url"):
+            assets["small_url"] = self.template.get("small_image_clickable_url")
+            
+        if assets:
+            activity["assets"] = assets
+            
+        # Timestamps
+        timestamp_mode = self.template.get("timestamp_mode", "None")
+        timestamps = {}
+        if timestamp_mode == "Custom":
+            if self.template.get("start_timestamp"):
+                timestamps["start"] = int(self.template.get("start_timestamp"))
+            if self.template.get("end_timestamp"):
+                timestamps["end"] = int(self.template.get("end_timestamp"))
+        elif timestamp_mode == "Since discord open":
+            timestamps["start"] = self.script_start_time
+        elif "Same as your current time" in timestamp_mode:
+            now = time.localtime()
+            midnight_offset = (now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec) * 1000
+            timestamps["start"] = int(time.time() * 1000) - midnight_offset
+            
+        if timestamps:
+            activity["timestamps"] = timestamps
+            
+        # Buttons
+        # 直接與 Gateway 溝通時，User Token 使用 array of strings 與 metadata
+        # (雖然 Gateway API 標準要求 Array of Objects，但在某些情況下 User Token 能接受此法)
+        # 若仍有問題，我們改回標準格式
+        button_texts = []
+        button_urls = []
+        if self.template.get("button1_text"):
+            button_texts.append(str(self.template.get("button1_text"))[:32])
+            button_urls.append(str(self.template.get("button1_url", "")))
+        if self.template.get("button2_text"):
+            button_texts.append(str(self.template.get("button2_text"))[:32])
+            button_urls.append(str(self.template.get("button2_url", "")))
+            
+        if button_texts:
+            # 嘗試使用標準 Gateway Object 格式，這對於大部份 API 比較安全
+            activity["buttons"] = [
+                {"label": text, "url": url} for text, url in zip(button_texts, button_urls)
+            ]
+            
+        # 發送 OP 3 Presence Update
+        presence_payload = {
+            "op": 3,
+            "d": {
+                "status": self.template.get("status", "online"),
+                "since": int(time.time() * 1000),
+                "activities": [activity],
+                "afk": False
+            }
+        }
+        
+        await self.ws.send(json.dumps(presence_payload))
+        self.logger.info("Sent OP 3 Presence Update")
 
     async def connect(self):
         """連接並處理 WebSocket 訊息循環"""
@@ -208,7 +342,7 @@ class DiscordPresenceClient:
                             if event_type == "READY":
                                 user = data["d"]["user"]
                                 self.logger.info(f"Successfully connected and ready as: {user.get('username')}#{user.get('discriminator')}")
-                                
+                                await self.send_presence()
                         elif op == 7:  # Reconnect
                             self.logger.info("Gateway requested reconnect. Reconnecting...")
                             break
