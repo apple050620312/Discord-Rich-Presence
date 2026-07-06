@@ -3,8 +3,8 @@ import json
 import logging
 import os
 import time
-import sys
-
+import random
+import urllib.request
 import websockets
 
 # 設定日誌格式
@@ -12,21 +12,22 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - [%(name)s] %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler()
     ]
 )
 
 GATEWAY_URL = "wss://gateway.discord.gg/?v=9&encoding=json"
 
 class DiscordPresenceClient:
-    def __init__(self, token: str, template: dict, is_bot: bool, account_index: int):
-        self.token = token
+    def __init__(self, token, template, is_bot, index):
+        self.token = token.strip('"\' \t\r\n')
         self.template = template
         self.is_bot = is_bot
-        self.account_index = account_index
-        self.logger = logging.getLogger(f"Account-{account_index + 1}")
-        self.heartbeat_interval = 41.25  # 預設值，會被 Hello 事件覆寫
+        self.index = index
+        self.logger = logging.getLogger(f"Account-{index+1}")
+        
         self.ws = None
+        self.heartbeat_interval = 41250
         self.heartbeat_task = None
         self.sequence = None
         self.script_start_time = int(time.time() * 1000)
@@ -42,7 +43,6 @@ class DiscordPresenceClient:
                     }
                     await self.ws.send(json.dumps(payload))
                     self.logger.debug("Sent Heartbeat")
-                # 乘以 0.9 加上一些 jitter 以確保在逾時前送達 (Discord 建議做法為 jitter，這裡是簡單提早發送)
                 await asyncio.sleep(self.heartbeat_interval * 0.9 / 1000)
             except Exception as e:
                 self.logger.error(f"Heartbeat error: {e}")
@@ -50,118 +50,32 @@ class DiscordPresenceClient:
 
     async def identify(self):
         """發送認證與狀態資訊"""
-        auth_token = f"Bot {self.token}" if self.is_bot else self.token
-        
-        # 對應 Activity Type
-        activity_type_map = {
-            "Playing": 0,
-            "Streaming": 1,
-            "Listening": 2,
-            "Watching": 3,
-            "Competing": 5
-        }
-        
-        act_type_str = self.template.get("activity_type", "Playing")
-        act_type = activity_type_map.get(act_type_str, 0)
-        
-        # 建立基礎活動屬性
-        activity = {
-            "name": self.template.get("application_name", "Rich Presence"),
-            "type": act_type
-        }
-        
-        if self.template.get("application_id"):
-            activity["application_id"] = str(self.template.get("application_id"))
+        auth_token = self.token
+        if self.is_bot:
+            auth_token = f"Bot {auth_token}"
             
-        if self.template.get("detail_line_1"):
-            activity["details"] = self.template.get("detail_line_1")
-            
-        if self.template.get("state_line_2"):
-            activity["state"] = self.template.get("state_line_2")
-            
-        if self.template.get("stream_link") and act_type == 1:
-            activity["url"] = self.template.get("stream_link")
-            
-        # Party Size
-        p_size = self.template.get("party_size")
-        p_max = self.template.get("maximum_party_size")
-        if p_size is not None or p_max is not None:
-            activity["party"] = {
-                "size": [
-                    int(p_size) if p_size is not None else 1,
-                    int(p_max) if p_max is not None else 1
-                ]
-            }
-            
-        # Assets (Large Image & Small Image)
-        assets = {}
-        if self.template.get("large_image_url_key"):
-            assets["large_image"] = self.template.get("large_image_url_key")
-        if self.template.get("large_image_text"):
-            assets["large_text"] = self.template.get("large_image_text")
-        if self.template.get("large_image_clickable_url"):
-            assets["large_url"] = self.template.get("large_image_clickable_url")
-            
-        if self.template.get("small_image_url_key"):
-            assets["small_image"] = self.template.get("small_image_url_key")
-        if self.template.get("small_image_text"):
-            assets["small_text"] = self.template.get("small_image_text")
-        if self.template.get("small_image_clickable_url"):
-            assets["small_url"] = self.template.get("small_image_clickable_url")
-            
-        if assets:
-            activity["assets"] = assets
-            
-        # Timestamps
-        timestamp_mode = self.template.get("timestamp_mode", "None")
-        timestamps = {}
-        if timestamp_mode == "Custom":
-            if self.template.get("start_timestamp"):
-                timestamps["start"] = int(self.template.get("start_timestamp"))
-            if self.template.get("end_timestamp"):
-                timestamps["end"] = int(self.template.get("end_timestamp"))
-        elif timestamp_mode == "Since discord open":
-            timestamps["start"] = self.script_start_time
-        elif "Same as your current time" in timestamp_mode:
-            # Vencord 計算方式：從當天午夜開始算
-            now = time.localtime()
-            midnight_offset = (now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec) * 1000
-            timestamps["start"] = int(time.time() * 1000) - midnight_offset
-            
-        if timestamps:
-            activity["timestamps"] = timestamps
-            
-        # Vencord 特別支援的 URLs
-        if self.template.get("detail_url"):
-            activity["details_url"] = self.template.get("detail_url")
-        if self.template.get("state_url"):
-            activity["state_url"] = self.template.get("state_url")
-            
-        # Buttons 處理 (User Token 的格式必須是陣列字串與 metadata)
-        button_texts = []
-        button_urls = []
-        if self.template.get("button1_text"):
-            button_texts.append(str(self.template.get("button1_text"))[:32])
-            button_urls.append(str(self.template.get("button1_url", "")))
-        if self.template.get("button2_text"):
-            button_texts.append(str(self.template.get("button2_text"))[:32])
-            button_urls.append(str(self.template.get("button2_url", "")))
-            
-        if button_texts:
-            activity["buttons"] = button_texts
-            activity["metadata"] = {
-                "button_urls": button_urls
-            }
-        
         payload = {
             "op": 2,
             "d": {
                 "token": auth_token,
+                "capabilities": 16381,
                 "properties": {
                     "os": "Windows",
                     "browser": "Chrome",
-                    "device": ""
-                }
+                    "device": "",
+                    "system_locale": "en-US",
+                    "browser_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "browser_version": "120.0.0.0",
+                    "os_version": "10",
+                    "referrer": "",
+                    "referring_domain": "",
+                    "referrer_current": "",
+                    "referring_domain_current": "",
+                    "release_channel": "stable",
+                    "client_build_number": 250000,
+                    "client_event_source": None
+                },
+                "compress": False
             }
         }
         
@@ -173,7 +87,6 @@ class DiscordPresenceClient:
             return key
             
         def fetch():
-            import urllib.request
             try:
                 url = f"https://discord.com/api/v9/oauth2/applications/{app_id}/assets"
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -190,7 +103,6 @@ class DiscordPresenceClient:
 
     async def send_presence(self):
         """發送 OP 3 Presence Update"""
-        # 對應 Activity Type
         activity_type_map = {
             "Playing": 0,
             "Streaming": 1,
@@ -202,7 +114,6 @@ class DiscordPresenceClient:
         act_type_str = self.template.get("activity_type", "Playing")
         act_type = activity_type_map.get(act_type_str, 0)
         
-        # 建立基礎活動屬性
         activity = {
             "name": self.template.get("application_name", "Rich Presence"),
             "type": act_type,
@@ -222,7 +133,6 @@ class DiscordPresenceClient:
         if self.template.get("stream_link") and act_type == 1:
             activity["url"] = self.template.get("stream_link")
             
-        # Party Size
         p_size = self.template.get("party_size")
         p_max = self.template.get("maximum_party_size")
         if p_size is not None or p_max is not None:
@@ -233,7 +143,6 @@ class DiscordPresenceClient:
                 ]
             }
             
-        # Assets
         assets = {}
         large_key = self.template.get("large_image_url_key")
         if large_key:
@@ -260,7 +169,6 @@ class DiscordPresenceClient:
         if assets:
             activity["assets"] = assets
             
-        # Timestamps
         timestamp_mode = self.template.get("timestamp_mode", "None")
         timestamps = {}
         if timestamp_mode == "Custom":
@@ -278,7 +186,6 @@ class DiscordPresenceClient:
         if timestamps:
             activity["timestamps"] = timestamps
             
-        # Buttons
         button_texts = []
         button_urls = []
         if self.template.get("button1_text"):
@@ -289,13 +196,11 @@ class DiscordPresenceClient:
             button_urls.append(str(self.template.get("button2_url", "")))
             
         if button_texts:
-            # 必須使用 Vencord 方式 (String Array + metadata) 來欺騙 Gateway
             activity["buttons"] = button_texts
             activity["metadata"] = {
                 "button_urls": button_urls
             }
             
-        # 發送 OP 3 Presence Update
         presence_payload = {
             "op": 3,
             "d": {
@@ -325,18 +230,16 @@ class DiscordPresenceClient:
                             self.heartbeat_interval = data["d"]["heartbeat_interval"]
                             self.logger.info(f"Received Hello. Heartbeat interval: {self.heartbeat_interval}ms")
                             
-                            # 啟動心跳任務
                             if self.heartbeat_task:
                                 self.heartbeat_task.cancel()
                             self.heartbeat_task = asyncio.create_task(self.heartbeat())
                             
-                            # 發送 Identify
                             await self.identify()
                             
                         elif op == 11:  # Heartbeat ACK
                             self.logger.debug("Received Heartbeat ACK")
                             
-                        elif op == 0:  # Dispatch (一般事件)
+                        elif op == 0:  # Dispatch
                             event_type = data.get("t")
                             if event_type == "READY":
                                 user = data["d"]["user"]
@@ -345,11 +248,10 @@ class DiscordPresenceClient:
                         elif op == 7:  # Reconnect
                             self.logger.info("Gateway requested reconnect. Reconnecting...")
                             break
-                        
                         elif op == 9:  # Invalid Session
-                            self.logger.warning("Invalid session. Re-identifying...")
+                            self.logger.warning("Invalid Session. Re-identifying...")
                             await asyncio.sleep(random.uniform(1, 5))
-                            break # 斷開連接並讓外層迴圈重新連線
+                            break
                             
             except websockets.exceptions.ConnectionClosed as e:
                 self.logger.warning(f"Connection closed (code: {e.code}, reason: {e.reason}). Reconnecting in 5s...")
@@ -410,7 +312,6 @@ async def main():
         return
 
     logging.info(f"正在啟動 {len(tasks)} 個帳號的 Presence 腳本...")
-    # 同時執行所有帳號的連線任務
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
