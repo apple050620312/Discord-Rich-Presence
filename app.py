@@ -48,7 +48,25 @@ class CustomRPCClient(discord.Client):
 
     async def on_ready(self):
         self.logger.info(f"Successfully connected and ready as: {self.user}")
+        await self.update_status()
         
+        if not hasattr(self, 'midnight_task'):
+            self.midnight_task = self.loop.create_task(self.midnight_updater())
+
+    async def midnight_updater(self):
+        await self.wait_until_ready()
+        while not self.is_closed():
+            timestamp_mode = self.template.get("timestamp_mode", "None") if self.template else "None"
+            if "Same as your current time" in timestamp_mode:
+                now = time.localtime()
+                seconds_until_midnight = 86400 - (now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec)
+                await asyncio.sleep(seconds_until_midnight + 2) # 等到午夜過後兩秒鐘
+                self.logger.info("Midnight crossed. Updating timestamps for 'Same as your current time' mode.")
+                await self.update_status()
+            else:
+                break
+
+    async def update_status(self):
         activities_list = []
         
         # 1. 處理自訂狀態 (Custom Status: emoji + text)
